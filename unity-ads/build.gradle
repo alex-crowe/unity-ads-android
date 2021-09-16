@@ -1,0 +1,140 @@
+import com.android.ddmlib.DdmPreferences
+
+apply plugin: 'com.android.library'
+
+Properties properties = new Properties()
+if (project.rootProject.file('local.properties').exists()) {
+    properties.load(project.rootProject.file('local.properties').newDataInputStream())
+}
+
+ext {
+  GROUP_ID = "com.unity3d.ads"
+  ARTIFACT_ID = "unity-ads"
+  VERSION_ID = "9.9.9"
+  VERSION_CODE = 9990
+  SIGN_AAR = properties.getProperty("SIGN_AAR") ?: false
+}
+
+android {
+  compileSdkVersion 30
+  DdmPreferences.setLogLevel("verbose")
+  DdmPreferences.setTimeOut(10 * 60000)
+
+  defaultPublishConfig "release"
+
+  lintOptions {
+    abortOnError false
+  }
+
+  defaultConfig {
+    minSdkVersion 19
+    targetSdkVersion 30
+    versionCode = VERSION_CODE
+    versionName = VERSION_ID
+
+    setProperty("archivesBaseName", "unity-ads")
+
+    buildConfigField('String', 'WEBVIEW_BRANCH', getPropertyStringWithDefaultValue('WEBVIEW_BRANCH', '"' + versionName + '"'))
+    buildConfigField('int', 'VERSION_CODE', "$versionCode")
+    buildConfigField('String', 'VERSION_NAME', "\"$versionName\"")
+    testBuildType "debug"
+    multiDexEnabled true
+
+    testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    testInstrumentationRunnerArguments disableAnalytics: 'true' // Won't work yet, see: https://code.google.com/p/android/issues/detail?id=188241
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_7
+    targetCompatibility JavaVersion.VERSION_1_7
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+      proguardFiles getDefaultProguardFile('proguard-android.txt')
+      consumerProguardFiles 'proguard-rules.pro'
+    }
+    debug {
+      minifyEnabled false
+      testCoverageEnabled true
+      consumerProguardFiles 'proguard-rules.pro'
+    }
+  }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    androidTestCompileOnly project(':unity-scaradapter-2000')
+    androidTestCompileOnly project(':unity-scaradapter-1950')
+    androidTestCompileOnly project(':unity-scaradapter-1920')
+    androidTestCompileOnly project(':unity-scaradapter-common')
+    androidTestImplementation 'org.mockito:mockito-core:2.28.2'
+    androidTestImplementation 'org.mockito:mockito-android:2.25.0'
+    androidTestImplementation 'androidx.test:runner:1.3.0'
+    androidTestImplementation 'androidx.test:rules:1.3.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.2'
+    androidTestImplementation 'com.google.android.gms:play-services-ads:19.5.0'
+    compileOnly 'com.google.ar:core:1.0.0'
+    compileOnly project(':unity-scaradapter-2000')
+    compileOnly project(':unity-scaradapter-1950')
+    compileOnly project(':unity-scaradapter-1920')
+    compileOnly project(':unity-scaradapter-common')
+}
+
+task javadoc(type: Javadoc) {
+    description "Generates Javadoc for Release"
+    source = android.sourceSets.main.java.srcDirs
+    ext.androidJar = "${android.sdkDirectory}/platforms/${android.compileSdkVersion}/android.jar"
+    ext.generatedClass = "build/generated/source/buildConfig/release/"
+    doFirst {
+      classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
+      classpath += files(ext.androidJar)
+      classpath += fileTree(dir: 'libs', include: ['*.jar'])
+      classpath += files(ext.generatedClass)
+    }
+    options {
+           links "http://docs.oracle.com/javase/7/docs/api/"
+    }
+    exclude '**/R.java'
+    exclude 'com/unity3d/services/ar/view/GLSurfaceView.java'
+    exclude 'com/unity3d/services/ar/api/AR.java'
+    exclude 'com/unity3d/services/ar/ARUtils.java'
+    exclude 'com/unity3d/services/ar/configuration/ARModuleConfiguration.java'
+    exclude 'com/unity3d/services/ar/view/ARView.java'
+    exclude 'com/unity3d/services/ar/view/ARViewHandler.java'
+    exclude 'com/unity3d/services/ar/view/BackgroundRenderer.java'
+    exclude 'com/unity3d/services/ar/view/DisplayRotationHelper.java'
+    destinationDir = file("../javadoc/")
+}
+
+task androidJavadocsJar(type: Jar, dependsOn: javadoc) {
+    archiveClassifier.set("javadoc")
+    archiveBaseName.set("${archivesBaseName}")
+    from javadoc.destinationDir
+}
+
+task androidSourcesJar(type: Jar) {
+    archiveClassifier.set("sources")
+    archiveBaseName.set("${archivesBaseName}")
+    from android.sourceSets.main.java.srcDirs
+}
+
+artifacts {
+    archives androidJavadocsJar
+    archives androidSourcesJar
+}
+
+def getPropertyStringWithDefaultValue(String key, String defaultValue) {
+  def value = project.getProperties().get(key)
+  // Ensure that string is quoted
+  if ((value != null) && (!(value ==~ /^".*"$/)) ){
+    println "Value for key '$key' is not quoted, adding quotes to '$value'"
+    value = "\"$value\""
+  }
+  return value != null ? value : defaultValue
+}
+
+apply from: 'publishing.gradle'
+apply from: 'artifactory.gradle'
+apply from: 'jacoco.gradle'
